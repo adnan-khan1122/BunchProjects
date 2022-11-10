@@ -10,12 +10,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -24,12 +24,13 @@ import android.widget.Toast;
 import com.data.employees.handlers.DatabaseHandler;
 import com.data.employees.adapters.EmployeesAdapter;
 import com.data.employees.R;
-import com.data.employees.helper.CSVWriter;
+import com.data.employees.helper.XlsWriter;
 import com.data.employees.model.EmployeeModel;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -53,16 +54,17 @@ public class MainActivity extends AppCompatActivity {
         db = new DatabaseHandler(this);
 
         // Inserting Contacts
-        if (!mPreference.getBoolean("IS_DB_CREATED", false)){
+        if (!mPreference.getBoolean("IS_DB_CREATED", false)) {
             createEmployeesDb();
         }
 
-       try {
-           List<EmployeeModel> employeeModelList = db.getAllEmployees();
-           EmployeesAdapter adapter = new EmployeesAdapter(this, employeeModelList);
-           listView.setAdapter(adapter);
-           progressBar.setVisibility(View.GONE);
-       }catch (Exception e){}
+        try {
+            List<EmployeeModel> employeeModelList = db.getAllEmployees();
+            EmployeesAdapter adapter = new EmployeesAdapter(this, employeeModelList);
+            listView.setAdapter(adapter);
+            progressBar.setVisibility(View.GONE);
+        } catch (Exception e) {
+        }
 
         exportToExcel.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -74,8 +76,15 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-
     private void exportDB() {
+
+        FileOutputStream fos;
+        File file;
+
+        String selectQuery = "SELECT  * FROM Employees";
+
+        SQLiteDatabase db2 = db.getWritableDatabase();
+        Cursor cursor = db2.rawQuery(selectQuery, null);
 
         File root = getCacheDir();
         File storageDir = new File(root + "/Storage");
@@ -84,35 +93,22 @@ public class MainActivity extends AppCompatActivity {
             storageDir.mkdirs();
         }
 
-        File file = new File(storageDir, "EmployeeTable.csv");
-        try
-        {
-            file.createNewFile();
-            CSVWriter csvWrite = new CSVWriter(new FileWriter(file));
+        file = new File(storageDir, "EmployeeTable.xls");
 
-            // Select All Query
-            String selectQuery = "SELECT  * FROM Employees";
+        XlsWriter xlsWriter = new XlsWriter(cursor, file);
+        fos = xlsWriter.writeNext();
 
-            SQLiteDatabase db2 = db.getWritableDatabase();
-            Cursor cursor = db2.rawQuery(selectQuery, null);
-
-
-            csvWrite.writeNext(cursor.getColumnNames());
-            while(cursor.moveToNext())
-            {
-                //Which column you want to exprort
-                String arrStr[] = {cursor.getString(0), cursor.getString(1)};
-                csvWrite.writeNext(arrStr);
+        if (fos != null) {
+            try {
+                fos.flush();
+                fos.close();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            csvWrite.close();
-            cursor.close();
+        }
+        Toast.makeText(MainActivity.this, "Excel Sheet Generated", Toast.LENGTH_SHORT).show();
+        composeEmail("bcsf1410@gmail.com", "Employees Table Exported", file);
 
-            composeEmail("bcsf1410@gmail.com", "Employees Table Exported", file);
-        }
-        catch(Exception sqlEx)
-        {
-            Log.e("MainActivity", sqlEx.getMessage(), sqlEx);
-        }
     }
 
     public void composeEmail(String emailAddress, String subject, File file) {
@@ -120,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             Uri fileUri = FileProvider.getUriForFile(this,
-                    getPackageName()+".provider", file);
+                    getPackageName() + ".provider", file);
 
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType("message/rfc822");
@@ -129,42 +125,46 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra(Intent.EXTRA_EMAIL, new String[]{emailAddress});
             intent.putExtra(Intent.EXTRA_SUBJECT, subject);
             intent.putExtra(Intent.EXTRA_TEXT, "");
+
+            List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo resolveInfo : resInfoList) {
+                String packageName = resolveInfo.activityInfo.packageName;
+                grantUriPermission(packageName, fileUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+
             startActivity(Intent.createChooser(intent, "Choose Email"));
-        }catch (Exception e){
+        } catch (Exception e) {
             Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
+
     private void createEmployeesDb() {
-       try {
-           db.addEmployee(new EmployeeModel(1, "Mark"));
-           db.addEmployee(new EmployeeModel(2, "Zach"));
-           db.addEmployee(new EmployeeModel(3, "Ryan"));
-           db.addEmployee(new EmployeeModel(4, "William"));
-           db.addEmployee(new EmployeeModel(5, "Hazel"));
-           db.addEmployee(new EmployeeModel(6, "Alexander"));
-           db.addEmployee(new EmployeeModel(7, "Feyra"));
-           db.addEmployee(new EmployeeModel(8, "Omm"));
-           db.addEmployee(new EmployeeModel(9, "Tandu"));
-           db.addEmployee(new EmployeeModel(10, "Dana"));
-           db.addEmployee(new EmployeeModel(11, "Hyara"));
-           db.addEmployee(new EmployeeModel(12, "Gabele"));
-           db.addEmployee(new EmployeeModel(13, "Nasyra"));
-           db.addEmployee(new EmployeeModel(14, "Eodriel"));
-           db.addEmployee(new EmployeeModel(15, "Emeryn"));
-           db.addEmployee(new EmployeeModel(16, "Avon"));
-           db.addEmployee(new EmployeeModel(17, "Leo"));
-           db.addEmployee(new EmployeeModel(18, "Jose"));
-           db.addEmployee(new EmployeeModel(19, "Mara"));
-           db.addEmployee(new EmployeeModel(20, "Russell"));
+        try {
+            db.addEmployee(new EmployeeModel(1, "Mark"));
+            db.addEmployee(new EmployeeModel(2, "Zach"));
+            db.addEmployee(new EmployeeModel(3, "Ryan"));
+            db.addEmployee(new EmployeeModel(4, "William"));
+            db.addEmployee(new EmployeeModel(5, "Hazel"));
+            db.addEmployee(new EmployeeModel(6, "Alexander"));
+            db.addEmployee(new EmployeeModel(7, "Feyra"));
+            db.addEmployee(new EmployeeModel(8, "Omm"));
+            db.addEmployee(new EmployeeModel(9, "Tandu"));
+            db.addEmployee(new EmployeeModel(10, "Dana"));
+            db.addEmployee(new EmployeeModel(11, "Hyara"));
+            db.addEmployee(new EmployeeModel(12, "Gabele"));
+            db.addEmployee(new EmployeeModel(13, "Nasyra"));
+            db.addEmployee(new EmployeeModel(14, "Eodriel"));
+            db.addEmployee(new EmployeeModel(15, "Emeryn"));
+            db.addEmployee(new EmployeeModel(16, "Avon"));
+            db.addEmployee(new EmployeeModel(17, "Leo"));
+            db.addEmployee(new EmployeeModel(18, "Jose"));
+            db.addEmployee(new EmployeeModel(19, "Mara"));
+            db.addEmployee(new EmployeeModel(20, "Russell"));
 
-           mPreference.edit().putBoolean("IS_DB_CREATED", true).commit();
-       }catch (Exception e){}
+            mPreference.edit().putBoolean("IS_DB_CREATED", true).commit();
+        } catch (Exception e) {
+        }
     }
-
-
-
-
-
 
 
     public boolean getStoragePermission() {
@@ -190,7 +190,8 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 return true;
             }
-        }catch (Exception e){}
+        } catch (Exception e) {
+        }
 
         return false;
     }
